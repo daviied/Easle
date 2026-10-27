@@ -1,0 +1,16 @@
+services:
+  easel:
+    build: .
+    # Set EASEL_IMAGE=ghcr.io/<user>/<repo>:latest in .env to use the image GitHub Actions publishes
+    # (`docker compose pull`), or leave unset to build locally (`docker compose up --build`).
+    image: ${EASEL_IMAGE:-easel:latest}
+    container_name: easel
+    restart: unless-stopped
+    ports:
+      - "${EASEL_PORT:-8080}:8080"
+    env_file: .env
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true

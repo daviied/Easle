@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Easel</title>
+  <meta name="theme-color" content="#4f46e5">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Easel">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="modulepreload" href="/api.js">
+  <link rel="modulepreload" href="/html.js">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <aside id="sidebar">
+    <a class="brand" href="#/"><img src="/icons/icon.svg" alt="" width="28" height="28"><span>Easel</span></a>
+    <nav class="side-nav">
+      <a href="#/" data-nav="home"><span class="ico">🏠</span>Home</a>
+      <a href="#/grades" data-nav="grades"><span class="ico">📊</span>Grades</a>
+      <a href="#/announcements" data-nav="announcements"><span class="ico">📣</span>Announcements</a>
+    </nav>
+    <div class="side-label">Courses</div>
+    <nav id="course-nav" class="side-nav"></nav>
+    <div class="side-foot"><span id="who" class="muted"></span><button id="logout" class="link-btn">Sign out</button></div>
+  </aside>
+  <div id="wrap">
+    <header id="topbar">
+      <button id="back" class="icon-btn" aria-label="Back" hidden>‹</button>
+      <h1 id="title">Easel</h1>
+      <button id="refresh" class="icon-btn" aria-label="Refresh">⟳</button>
+    </header>
+    <main id="main"><div class="skeleton"><div></div><div></div><div></div></div></main>
+  </div>
+  <nav id="tabbar">
+    <a href="#/" data-nav="home"><span>🏠</span>Home</a>
+    <a href="#/courses" data-nav="courses"><span>📚</span>Courses</a>
+    <a href="#/grades" data-nav="grades"><span>📊</span>Grades</a>
+    <a href="#/announcements" data-nav="announcements"><span>📣</span>News</a>
+  </nav>
+  <div id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
