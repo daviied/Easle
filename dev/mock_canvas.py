@@ -71,6 +71,10 @@ ASSIGNMENTS = {
         "submission_types": ["online_upload"], "group": 1, "description": "<p>Sections 11.1-11.3</p>"},
     6: {"id": 6, "course_id": 103, "name": "Memo draft", "due_at": iso(-2), "points_possible": 25,
         "submission_types": ["online_text_entry"], "group": 4, "description": "<p>One page memo.</p>"},
+    8: {"id": 8, "course_id": 101, "name": "Problem Set 5", "due_at": iso(-13), "points_possible": 20,
+        "submission_types": ["online_upload"], "group": 1, "description": ""},
+    9: {"id": 9, "course_id": 101, "name": "Participation", "due_at": None, "points_possible": 5,
+        "submission_types": ["none"], "group": 1, "omit_from_final_grade": True, "description": ""},
     7: {"id": 7, "course_id": 101, "name": "Midterm (proctored)", "due_at": iso(8), "points_possible": 100, "quiz_id": 78,
         "submission_types": ["online_quiz"], "group": 2, "description": "<p>LockDown Browser required.</p>"},
 }
@@ -88,7 +92,22 @@ SUBMISSIONS = {
         "rubric_assessment": {"r1": {"points": 14, "comments": "Small slip on #7"}, "r2": {"points": 4}}},
     6: {"workflow_state": "unsubmitted", "missing": True, "submission_comments": []},
     7: {"workflow_state": "unsubmitted"},
+    8: {"workflow_state": "graded", "submitted_at": iso(-14), "score": 10, "grade": "10"},
+    9: {"workflow_state": "graded", "score": 5, "grade": "5"},
 }
+# Calculus II: PS6 18/20 + PS5 10/20 (dropped) -> homework 90%; quiz 4 not graded yet -> current 90% (A- on its scheme).
+COURSES[0]["grading_standard_id"] = 55
+COURSES[0]["enrollments"] = enrollment(90.0, "A-")
+GROUP_RULES = {1: {"drop_lowest": 1}}
+PAST_COURSES = [
+    {"id": 91, "name": "Calculus I", "course_code": "MATH 151", "term": {"name": "Spring 2026", "start_at": "2026-01-12T00:00:00Z"},
+     "enrollments": [{"type": "student", "computed_final_score": 88.2, "computed_final_grade": "B+"}]},
+    {"id": 92, "name": "English Composition", "course_code": "ENG 101", "term": {"name": "Spring 2026", "start_at": "2026-01-12T00:00:00Z"},
+     "enrollments": [{"type": "student", "computed_final_score": 95.0, "computed_final_grade": "A"}]},
+    {"id": 93, "name": "Intro to Programming", "course_code": "CS 101", "term": {"name": "Fall 2025", "start_at": "2025-08-25T00:00:00Z"},
+     "enrollments": [{"type": "student", "computed_final_score": 79.0, "computed_final_grade": None}]},
+]
+CUSTOM_DATA = {}
 PEER_COMMENTS = []
 
 GROUPS_BY_COURSE = {101: [(1, "Homework", 40), (2, "Quizzes", 60)], 102: [(3, "Assignments", 100)], 103: [(4, "Writing", 100)]}
@@ -150,7 +169,28 @@ def colors():
 
 @app.get("/api/v1/courses")
 def courses(request: Request):
-    return page(request, COURSES)
+    return page(request, PAST_COURSES if request.query_params.get("enrollment_state") == "completed" else COURSES)
+
+
+@app.get("/api/v1/courses/{cid}/grading_standards")
+def grading_standards(cid: int):
+    scheme = [("A", 0.93), ("A-", 0.9), ("B+", 0.87), ("B", 0.83), ("B-", 0.8), ("C", 0.7), ("D", 0.6), ("F", 0)]
+    return [{"id": 55, "title": "Math dept", "grading_scheme": [{"name": n, "value": v} for n, v in scheme]}] if cid == 101 else []
+
+
+@app.get("/api/v1/users/self/custom_data/{scope}")
+def get_custom(scope: str, request: Request):
+    key = (request.query_params.get("ns"), scope)
+    return {"data": CUSTOM_DATA[key]} if key in CUSTOM_DATA else err(404, "no data for scope")
+
+
+@app.put("/api/v1/users/self/custom_data/{scope}")
+async def put_custom(scope: str, request: Request):
+    body = await request.json()
+    if not body.get("ns"):
+        return err(400, "ns required")
+    CUSTOM_DATA[(body["ns"], scope)] = body["data"]
+    return {"data": body["data"]}
 
 
 @app.get("/api/v1/courses/{cid}")
@@ -216,6 +256,8 @@ PLANNER_OVERRIDES = {}
 def planner(request: Request):
     items = []
     for a in ASSIGNMENTS.values():
+        if not a["due_at"]:
+            continue
         s = SUBMISSIONS.get(a["id"], {})
         ptype = "quiz" if a.get("quiz_id") else "assignment"
         pid = a.get("quiz_id") or a["id"]
@@ -257,7 +299,7 @@ def missing():
 
 @app.get("/api/v1/courses/{cid}/assignment_groups")
 def groups(cid: int):
-    return [{"id": gid, "name": name, "group_weight": w,
+    return [{"id": gid, "name": name, "group_weight": w, "rules": GROUP_RULES.get(gid, {}),
              "assignments": [with_sub(a) for a in ASSIGNMENTS.values() if a["group"] == gid]}
             for gid, name, w in GROUPS_BY_COURSE[cid]]
 

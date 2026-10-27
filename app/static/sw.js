@@ -1,6 +1,6 @@
 // App-shell cache: the UI opens instantly (even offline); data comes from the app's own IndexedDB cache.
-const CACHE = 'easel-shell-v2';
-const SHELL = ['/', '/index.html', '/app.js', '/api.js', '/html.js', '/ui.js', '/inbox.js', '/quiz.js', '/styles.css', '/manifest.webmanifest',
+const CACHE = 'easel-shell-v3';
+const SHELL = ['/', '/index.html', '/app.js', '/api.js', '/html.js', '/ui.js', '/inbox.js', '/quiz.js', '/grades.js', '/styles.css', '/manifest.webmanifest',
   '/icons/icon.svg', '/icons/icon-192.png'];
 
 self.addEventListener('install', (e) => {

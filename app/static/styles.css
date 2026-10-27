@@ -314,6 +314,34 @@ a.row:hover, .rowlink:hover { background: var(--panel-2); }
 .quiz-foot { display: flex; justify-content: flex-end; margin: 6px 0 30px; }
 @media (max-width: 899px) { .quiz-bar { top: calc(52px + env(safe-area-inset-top)); } }
 
+/* ---------- what-if & GPA ---------- */
+.small { font-size: .82rem; }
+.accent { color: var(--accent); }
+.gs-cols { display: flex; gap: 32px; flex-wrap: wrap; }
+.gs-actions { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+.grade-summary p { margin: 6px 0; }
+.score-edit { display: inline-flex; align-items: center; gap: 4px; }
+.wi-input { width: 72px; text-align: right; padding: 5px 7px !important; font-variant-numeric: tabular-nums; }
+.grade-row.is-whatif .wi-input { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--panel-2)); }
+.dropped-badge { display: none; }
+.grade-row.is-dropped .dropped-badge { display: inline-block; }
+.grade-row.is-dropped .t { text-decoration: line-through; color: var(--muted); }
+.gpa-card { display: flex; align-items: center; justify-content: space-between; color: var(--text); }
+.gpa-card:hover { background: var(--panel-2); }
+.gpa-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.gpa-summary .card { margin: 0; }
+.gpa-settings { display: flex; flex-direction: column; gap: 12px; }
+.custom-scale, .prior { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.g-field { display: inline-flex; flex-direction: column; gap: 3px; font-size: .75rem; color: var(--muted); font-weight: 600; }
+.g-field input, .g-field select { font: inherit; font-size: .9rem; color: var(--text); background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; width: 90px; }
+.g-field select { width: auto; min-width: 110px; }
+.g-field.narrow input { width: 64px; }
+.gpa-row { flex-wrap: wrap; }
+.gpa-row.off .t { color: var(--muted); }
+.gpa-row input[type=checkbox] { accent-color: var(--accent); width: 18px; height: 18px; }
+.g-points { min-width: 56px; text-align: right; }
+@media (max-width: 599px) { .gpa-row .grow { flex-basis: calc(100% - 60px); } }
+
 .login-body { display: grid; place-items: center; min-height: 100vh; padding: 16px; }
 .login-card { width: min(360px, 100%); display: flex; flex-direction: column; gap: 12px; align-items: stretch; text-align: center; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 28px; }
 .login-card img { align-self: center; }

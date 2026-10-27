@@ -9,6 +9,7 @@ import {
 } from './ui.js';
 import * as inbox from './inbox.js';
 import * as quiz from './quiz.js';
+import * as grades from './grades.js';
 
 const main = $('#main');
 const groupsPath = (cid) => `courses/${cid}/assignment_groups?include[]=assignments&include[]=submission`;
@@ -17,7 +18,7 @@ const groupsPath = (cid) => `courses/${cid}/assignment_groups?include[]=assignme
 // Each screen: data(params) -> {key: path | {path, optional}}, render(d, params), optional after(el, d, params).
 // `tab` shows the course/group header; `static` screens are painted once and never repainted by a refresh.
 
-const screens = { ...inbox.screens, ...quiz.screens };
+const screens = { ...inbox.screens, ...quiz.screens, ...grades.screens };
 
 screens.dashboard = {
   title: () => 'Home',
@@ -117,17 +118,8 @@ function groupRows(list) {
 
 screens.courses = {
   title: () => 'Courses',
-  data: () => ({ courses: COURSES, groups: { path: GROUPS, optional: true } }),
+  data: () => ({ courses: COURSES, userGroups: { path: GROUPS, optional: true } }),
   render: () => html`${courseCards()}${state.groups.length ? html`<h2>Groups</h2>${groupRows(state.groups)}` : ''}`,
-};
-
-screens.grades = {
-  title: () => 'Grades',
-  data: () => ({ courses: COURSES }),
-  render: () => html`<div class="card list">${state.courses.map((c) => html`
-    <a class="row" href="#/c/${c.id}/grades">${dot(c.id)}
-      <div class="grow"><div class="t">${c.name}</div><div class="sub">${c.course_code}</div></div>
-      <span class="grade">${gradeText(c) || (c.hide_final_grades ? 'Hidden' : '–')}</span></a>`)}</div>`,
 };
 
 screens.announcements = {
@@ -622,28 +614,6 @@ screens.quizzes = {
   },
 };
 
-screens.courseGrades = {
-  tab: 'grades',
-  title: (_d, p) => courseName(p.cid),
-  data: ({ cid }) => ({ groups: groupsPath(cid), courses: COURSES }),
-  render({ groups }, { cid }) {
-    const c = course(cid);
-    return html`
-      <div class="card grade-summary"><div class="muted">Current grade</div><div class="big-grade">${gradeText(c) || '–'}</div>
-        <a href="${canvasUrl(`/courses/${cid}/grades`)}" target="_blank" rel="noopener">Grades in Canvas ${ext}</a></div>
-      ${groups.map((g) => html`
-        <section><h2>${g.name}${c?.apply_assignment_group_weights && g.group_weight ? html` <span class="muted">${num(g.group_weight)}%</span>` : ''}</h2>
-        <div class="card list">${(g.assignments || []).map((a) => {
-          const s = a.submission || {};
-          const score = s.excused ? 'EX' : s.score != null ? `${num(s.score)} / ${num(a.points_possible)}` : `– / ${num(a.points_possible)}`;
-          return html`<a class="row" href="#/c/${cid}/a/${a.id}">
-            <div class="grow"><div class="t">${a.name}</div><div class="sub">${a.due_at ? 'Due ' + when(a.due_at) : ''}</div></div>
-            <div class="badges">${s.missing ? html`<span class="badge red">Missing</span>` : ''}${s.late ? html`<span class="badge orange">Late</span>` : ''}</div>
-            <span class="grade">${score}</span></a>`;
-        })}</div></section>`)}`;
-  },
-};
-
 screens.syllabus = {
   tab: 'syllabus',
   title: (_d, p) => courseName(p.cid),
@@ -660,7 +630,7 @@ const SHARED = [
 ];
 
 const ROUTES = [
-  ['/', 'dashboard'], ['/courses', 'courses'], ['/grades', 'grades'], ['/announcements', 'announcements'],
+  ['/', 'dashboard'], ['/courses', 'courses'], ['/grades', 'grades'], ['/gpa', 'gpa'], ['/announcements', 'announcements'],
   ['/inbox', 'inbox'], ['/inbox/new', 'compose'], ['/inbox/:id', 'conversation'],
   ['/c/:cid', 'courseHome'], ['/c/:cid/modules', 'modules'], ['/c/:cid/assignments', 'assignments'],
   ['/c/:cid/a/:aid', 'assignment'], ['/c/:cid/front', 'front'], ['/c/:cid/quizzes', 'quizzes'],
@@ -716,7 +686,7 @@ async function render(force = false) {
     if (shown && [...main.querySelectorAll('input[type=file]')].some((f) => f.files.length)) return;
     const d = Object.fromEntries(spec.map((s, i) => [s.key, vals[i] ?? null]));
     if (d.courses) syncCourses(d.courses);
-    if (d.groups || d._groups) syncGroups(d.groups || d._groups);
+    if (d.userGroups || d._groups) syncGroups(d.userGroups || d._groups); // not `groups`: grade screens use that for assignment groups
     paint(screen, d, params, !shown && isNewPage);
     shown = json;
   };
@@ -862,6 +832,7 @@ function withProgress(f) {
 const actions = {
   ...inbox.actions,
   ...quiz.actions,
+  ...grades.actions,
   retry: () => render(true),
   async done(btn) {
     const wasDone = !!btn.dataset.done;

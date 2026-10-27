@@ -12,7 +12,15 @@ Everything goes through the real Canvas API, so it stays in sync both ways. Subm
 - **Quizzes**: Classic Quizzes are taken right in the app (see below). New Quizzes, and quizzes with settings the app can't enforce, open on Canvas.
 - **Inbox**: read, reply to, archive and mark unread your Canvas messages. Write new ones with recipient search (people, or whole roles such as a course's Teachers), a course or group, attachments, and an option to send an individual copy to each recipient. Unread count in the nav.
 - **People & groups**: course and group rosters by role, each with a Message button. Your groups appear in the sidebar with their own announcements, discussions, pages, files and people.
-- **Grades**: overall and per course, grouped by assignment group with weights.
+- **Grades and what-if scores**: overall and per course, grouped by assignment group with weights. On a course's Grades tab you can type a hypothetical score next to any assignment, and Easel recalculates the course grade the way Canvas does. That means graded work only, group weights, drop lowest/highest rules (dropped items are shown), excused and "not counted" items skipped, and the course's own letter scale. What-if scores stay on that device and are never sent to Canvas. If Easel's calculation doesn't match the grade Canvas shows, it tells you, since teachers can use settings students can't see.
+- **GPA tracker**: term GPA, a GPA per past term, and cumulative GPA. It uses your current grades and the final grades of finished courses.
+  - You enter credit hours for each course; a course with no credits isn't counted.
+  - You can override any letter, to match your transcript or to try a what-if.
+  - Mark a course pass/fail or turn it off entirely.
+  - Add credits from before Canvas or transferred ones.
+  - Pick a 4.0, 4.3 or no-plus/minus scale, or set a custom one.
+  - Add an honors/AP bonus to get a weighted GPA.
+  - These settings are saved to your Canvas account's private app storage ("custom data"), so they sync across your devices. Only you can see them.
 - **Announcements and discussions** (courses and groups): read, see what's unread, reply and reply in threads, attach files, like posts, and edit or delete your own replies. Start new discussions where the course or group allows it. Opening a topic marks it read in Canvas.
 - **Modules, pages, files, syllabus**: browse everything. Opening a "must view" item marks it viewed in Canvas.
 - Anything this app can't do itself (media recordings, annotation submissions, external tools) gets an **Open in Canvas ↗** link.
@@ -37,7 +45,7 @@ Two things to know:
 - Hovering or touching a link starts loading the next screen before you tap it.
 - The server follows Canvas pagination for you (100 per page), merges duplicate requests, and briefly caches responses (`CACHE_TTL`).
 - A service worker caches the app shell, so it opens instantly and still shows your last-seen data when offline.
-- No framework, no build step: about 100 KB of plain JavaScript in total.
+- No framework, no build step: about 120 KB of plain JavaScript in total.
 
 ## Quick install (no clone needed)
 
@@ -184,10 +192,10 @@ To regenerate the PNG icons after editing the artwork: `python tools/make_icons.
 ## Layout
 
 ```
-app/main.py       routes: login, read proxy, files, submissions, discussions, inbox, quizzes
+app/main.py       routes: login, read proxy, files, submissions, discussions, inbox, quizzes, GPA settings
 app/canvas.py     Canvas client: pagination, cache, de-dup, 3-step file upload
 app/auth.py       password login + signed cookie
 app/config.py     environment variables
-app/static/       the PWA: app.js (router + core screens), inbox.js, quiz.js, ui.js, api.js, html.js, styles.css, sw.js
+app/static/       the PWA: app.js (router + core screens), grades.js (what-if, GPA), inbox.js, quiz.js, ui.js, api.js, html.js, styles.css, sw.js
 dev/mock_canvas.py  fake Canvas for local testing
 ```

@@ -382,6 +382,21 @@ async def inbox_state(conv: int, payload: dict = Body(...)):
     return await canvas.send("PUT", f"conversations/{conv}", data={"conversation[workflow_state]": state})
 
 
+# ---------- settings stored on the user's Canvas account ----------
+# Canvas "custom data" is private per-user app storage, so settings follow you to every device
+# without the server needing a database or a writable volume.
+
+PREF_NS = "com.easel.app"
+PREF_KEYS = {"gpa"}
+
+
+@app.post("/api/prefs/{key}")
+async def save_pref(key: str, payload: dict = Body(...)):
+    if key not in PREF_KEYS:
+        return bad("Unknown setting")
+    return await canvas.send("PUT", f"users/self/custom_data/{key}", json={"ns": PREF_NS, "data": payload.get("data")})
+
+
 # ---------- classic quizzes ----------
 # Quizzes whose settings this app can't honour stay on Canvas; the server re-checks so no rule can be bypassed.
 

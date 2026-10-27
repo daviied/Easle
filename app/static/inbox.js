@@ -104,7 +104,7 @@ let searchTimer;
 screens.compose = {
   title: () => 'New message',
   static: true, // interactive form: never repaint it from a background refresh
-  data: () => ({ courses: COURSES, groups: { path: GROUPS, optional: true } }),
+  data: () => ({ courses: COURSES, userGroups: { path: GROUPS, optional: true } }),
   render(_d, { q }) {
     draft.to = new Map();
     if (q?.get('to')) draft.to.set(q.get('to'), q.get('name') || q.get('to'));
