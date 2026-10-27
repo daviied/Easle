@@ -32,13 +32,15 @@ export function route(url) {
   let m;
   if ((m = p.match(/^\/(?:courses\/\d+\/|users\/\d+\/)?files\/(\d+)/))) return { href: `/api/file/${m[1]}?inline=1`, external: true, file: m[1] };
   if ((m = p.match(/^\/courses\/(\d+)\/assignments\/(\d+)\/?$/))) return { href: `#/c/${m[1]}/a/${m[2]}` };
-  if ((m = p.match(/^\/courses\/(\d+)\/(?:pages|wiki)\/([^/]+)\/?$/))) return { href: `#/c/${m[1]}/p/${m[2]}` };
-  if ((m = p.match(/^\/courses\/(\d+)\/(?:discussion_topics|announcements)\/(\d+)\/?$/))) return { href: `#/c/${m[1]}/d/${m[2]}` };
-  if ((m = p.match(/^\/courses\/(\d+)\/(modules|assignments|announcements|discussion_topics|pages|files|grades|quizzes|assignments\/syllabus)\/?$/))) {
-    const tab = { discussion_topics: 'discussions', 'assignments/syllabus': 'syllabus' }[m[2]] || m[2];
-    return { href: `#/c/${m[1]}/${tab}` };
+  if ((m = p.match(/^\/courses\/(\d+)\/quizzes\/(\d+)\/?$/))) return { href: `#/c/${m[1]}/q/${m[2]}` };
+  if ((m = p.match(/^\/(courses|groups)\/(\d+)\/(?:pages|wiki)\/([^/]+)\/?$/))) return { href: `#/${m[1][0]}/${m[2]}/p/${m[3]}` };
+  if ((m = p.match(/^\/(courses|groups)\/(\d+)\/(?:discussion_topics|announcements)\/(\d+)\/?$/))) return { href: `#/${m[1][0]}/${m[2]}/d/${m[3]}` };
+  if ((m = p.match(/^\/(courses|groups)\/(\d+)\/(modules|assignments|announcements|discussion_topics|pages|files|grades|quizzes|users|assignments\/syllabus)\/?$/))) {
+    const tab = { discussion_topics: 'discussions', users: 'people', 'assignments/syllabus': 'syllabus' }[m[3]] || m[3];
+    return { href: `#/${m[1][0]}/${m[2]}/${tab}` };
   }
-  if ((m = p.match(/^\/courses\/(\d+)\/?$/))) return { href: `#/c/${m[1]}` };
+  if ((m = p.match(/^\/(courses|groups)\/(\d+)\/?$/))) return { href: `#/${m[1][0]}/${m[2]}` };
+  if (/^\/conversations\/?$/.test(p)) return { href: '#/inbox' };
   return { href: u.href, external: true };
 }
 
@@ -119,6 +121,13 @@ export function textOf(input, max = 180) {
   if (!input) return '';
   const t = new DOMParser().parseFromString(input, 'text/html').body.textContent.replace(/\s+/g, ' ').trim();
   return t.length > max ? t.slice(0, max - 1) + '…' : t;
+}
+
+/** Canvas HTML -> plain text with paragraph breaks, for editing in a textarea. */
+export function htmlToText(input) {
+  if (!input) return '';
+  const marked = input.replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|div|li|h\d)>/gi, '\n\n');
+  return new DOMParser().parseFromString(marked, 'text/html').body.textContent.replace(/\n{3,}/g, '\n\n').trim();
 }
 
 /** Plain text a user typed -> simple HTML paragraphs for Canvas. */

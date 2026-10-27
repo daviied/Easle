@@ -2,17 +2,34 @@
 
 A fast, personal Canvas LMS client. It runs in Docker, talks to your school's Canvas with your own access token, and serves an installable web app (PWA) for your PC and phone.
 
-Everything goes through the real Canvas API, so it stays in sync both ways. Submissions, comments, discussion replies, to-do checkmarks and module progress show up in Canvas, and changes in Canvas show up here.
+Everything goes through the real Canvas API, so it stays in sync both ways. Submissions, quiz answers, messages, comments, discussion posts, to-do checkmarks and module progress show up in Canvas, and changes in Canvas show up here.
 
 ## What it does
 
 - **Home**: missing work, everything due in the next 6 weeks grouped by day (tap the circle to mark items done, like the Canvas planner), course cards with current grades, recent announcements.
 - **Assignments**: details, rubric, your submission and grade, comments. **Submit** files (multiple, with upload progress and drag-and-drop), text, or a URL; resubmit; add comments.
-- **Quizzes**: shown with a **Take quiz on Canvas** button that opens the official quiz page (classic and New Quizzes).
+- **Peer reviews**: assignments where you review classmates list your reviews, with a link to their work and a box for feedback. Rubric scoring is done on Canvas.
+- **Quizzes**: Classic Quizzes are taken right in the app (see below). New Quizzes, and quizzes with settings the app can't enforce, open on Canvas.
+- **Inbox**: read, reply to, archive and mark unread your Canvas messages. Write new ones with recipient search (people, or whole roles such as a course's Teachers), a course or group, attachments, and an option to send an individual copy to each recipient. Unread count in the nav.
+- **People & groups**: course and group rosters by role, each with a Message button. Your groups appear in the sidebar with their own announcements, discussions, pages, files and people.
 - **Grades**: overall and per course, grouped by assignment group with weights.
-- **Announcements and discussions**: read, see what's unread, post replies and threaded replies. Opening a topic marks it read in Canvas.
+- **Announcements and discussions** (courses and groups): read, see what's unread, reply and reply in threads, attach files, like posts, and edit or delete your own replies. Start new discussions where the course or group allows it. Opening a topic marks it read in Canvas.
 - **Modules, pages, files, syllabus**: browse everything. Opening a "must view" item marks it viewed in Canvas.
 - Anything this app can't do itself (media recordings, annotation submissions, external tools) gets an **Open in Canvas ↗** link.
+
+### Quizzes in the app
+
+Classic Quizzes run in Easel through Canvas's quiz-submission API:
+- **Every question type**: multiple choice, true/false, multiple answers, short answer, numeric/formula, fill in multiple blanks (inline), dropdowns, matching, essay, file upload, plus text-only sections.
+- **While you work**: answers save as you go, you can flag questions, and the timer counts down and submits automatically when time runs out.
+- **Resuming**: you can leave and pick the attempt back up on the same device. Canvas's time limit keeps running while you're away.
+- **Attempts**: they're counted, and past scores are shown.
+
+A quiz stays on Canvas, with a **Take quiz on Canvas** button, when it uses **LockDown Browser, an access code, IP restrictions, one question at a time, or locked questions**. The server checks this too, so these rules can't be bypassed by calling it directly. New Quizzes have no API for students, so they always open on Canvas.
+
+Two things to know:
+- **Starting on another device:** an attempt started on Canvas or another device can't be resumed in Easel. Finish it where you started it.
+- **The quiz log:** your teacher's quiz log only records what Canvas's API records, meaning answers, flags and submit. Page views and focus changes that the Canvas quiz page normally logs won't appear.
 
 ### Why it's faster
 
@@ -20,9 +37,38 @@ Everything goes through the real Canvas API, so it stays in sync both ways. Subm
 - Hovering or touching a link starts loading the next screen before you tap it.
 - The server follows Canvas pagination for you (100 per page), merges duplicate requests, and briefly caches responses (`CACHE_TTL`).
 - A service worker caches the app shell, so it opens instantly and still shows your last-seen data when offline.
-- No framework, no build step: about 60 KB of JavaScript in total.
+- No framework, no build step: about 100 KB of plain JavaScript in total.
 
-## Setup
+## Quick install (no clone needed)
+
+This uses the image GitHub Actions publishes (see "Using the image GitHub builds" below), so push to `main` once first.
+
+1. On the server, make a folder and put two files from this repo's `deploy/` folder in it: `docker-compose.yml`, and `.env.example` renamed to `.env`.
+2. Fill in `.env`: `EASEL_IMAGE`, `CANVAS_BASE_URL`, `CANVAS_TOKEN`, `APP_PASSWORD`, and ideally `TOTP_SECRET`.
+3. Log in to the registry once, with a GitHub token that has only the `read:packages` scope:
+   ```bash
+   docker login ghcr.io -u <your-username>
+   ```
+4. Start it:
+   ```bash
+   docker compose up -d
+   ```
+5. Point your reverse proxy at `http://127.0.0.1:8080`.
+
+To update, run `docker compose pull && docker compose up -d`. If a required value is missing from `.env`, compose stops and names it.
+
+The port is bound to `127.0.0.1`, so only a proxy on the same machine can reach it. If the proxy runs elsewhere, edit the `ports:` line as the comment in the file explains.
+
+### CasaOS
+
+1. In CasaOS, open **App Store → Custom Install** and click the import icon (top right). Paste the contents of `deploy/casaos.yml`.
+2. Replace `your-github-username` in the image name, and fill in the environment values. Each one is described in the form.
+3. Pulling a private image needs a one-time `docker login ghcr.io` on the CasaOS host, run over SSH or in its terminal. The other option is to make the package public on GitHub (Packages → easel → Package settings). The image contains no secrets, because those all come from the environment variables.
+4. Install, then point your reverse proxy at port 8102 on the CasaOS host (the file publishes the container's 8080 there). Set `FORWARDED_ALLOW_IPS` to your proxy's IP.
+
+To turn on two-factor login after the first start, run `docker exec easel python -m app.totp`. Paste the printed secret into `TOTP_SECRET` in the app's settings, then save.
+
+## Setup (build from source)
 
 1. Get a Canvas token: **Account → Settings → Approved Integrations → + New Access Token**.
 2. Create your config file (git-ignored, so it never reaches GitHub):
@@ -138,10 +184,10 @@ To regenerate the PNG icons after editing the artwork: `python tools/make_icons.
 ## Layout
 
 ```
-app/main.py       routes: login, read proxy, file streaming, submissions, replies
+app/main.py       routes: login, read proxy, files, submissions, discussions, inbox, quizzes
 app/canvas.py     Canvas client: pagination, cache, de-dup, 3-step file upload
 app/auth.py       password login + signed cookie
 app/config.py     environment variables
-app/static/       the PWA (index.html, app.js, api.js, html.js, styles.css, sw.js)
+app/static/       the PWA: app.js (router + core screens), inbox.js, quiz.js, ui.js, api.js, html.js, styles.css, sw.js
 dev/mock_canvas.py  fake Canvas for local testing
 ```

@@ -1,0 +1,39 @@
+# Easel: install without cloning the repo.
+#
+#   1. Put this file and .env (copied from .env.example in this folder) in an empty folder on the server.
+#   2. Fill in .env.
+#   3. docker login ghcr.io          (once; the image is private. Token needs only read:packages)
+#   4. docker compose up -d
+#
+# Update later with:  docker compose pull && docker compose up -d
+
+services:
+  easel:
+    image: ${EASEL_IMAGE:?Set EASEL_IMAGE in .env (e.g. ghcr.io/your-username/easel:latest)}
+    container_name: easel
+    restart: unless-stopped
+    pull_policy: always
+    ports:
+      # Reverse proxy on this same machine? Keep 127.0.0.1 so only the proxy can reach Easel.
+      # Proxy on another machine? Change to "${EASEL_PORT:-8080}:8080" and firewall the port to the proxy.
+      - "127.0.0.1:${EASEL_PORT:-8080}:8080"
+    environment:
+      CANVAS_BASE_URL: ${CANVAS_BASE_URL:?Set CANVAS_BASE_URL in .env}
+      CANVAS_TOKEN: ${CANVAS_TOKEN:?Set CANVAS_TOKEN in .env}
+      APP_PASSWORD: ${APP_PASSWORD:?Set APP_PASSWORD in .env}
+      TOTP_SECRET: ${TOTP_SECRET:-}
+      SESSION_SECRET: ${SESSION_SECRET:-}
+      SESSION_DAYS: ${SESSION_DAYS:-30}
+      CACHE_TTL: ${CACHE_TTL:-30}
+      COOKIE_SECURE: ${COOKIE_SECURE:-auto}
+      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-127.0.0.1}
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=2)"]
+      interval: 30s
+      timeout: 3s
+      retries: 3

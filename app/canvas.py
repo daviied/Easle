@@ -78,7 +78,7 @@ class Canvas:
 
     async def get(self, path, params=(), fresh=False, paginate=True, max_pages=50):
         params = list(params)
-        key = path + "?" + urlencode(params, doseq=True)
+        key = path + "?" + urlencode(params, doseq=True) + f"#{max_pages}"
         if not fresh:
             hit = self.cache.get(key)
             if hit and hit[0] > time.monotonic():
@@ -113,16 +113,20 @@ class Canvas:
             nxt = _next_link(r)
         return data
 
-    async def send(self, method, path, **kw):
+    async def send(self, method, path, invalidate=True, **kw):
         """Write call. Clears the cache so every device sees the change on its next refresh."""
         r = await self.request(method, path, **kw)
-        self.cache.clear()
+        if invalidate:
+            self.cache.clear()
         try:
             return r.json()
         except ValueError:
             return {}
 
     async def upload_submission_file(self, course, assignment, upload):
+        return await self.upload_file(f"courses/{course}/assignments/{assignment}/submissions/self/files", upload)
+
+    async def upload_file(self, announce_path, upload, extra=None):
         """Canvas 3-step upload: announce, upload to the returned URL, confirm. Returns the file id."""
         upload.file.seek(0, 2)
         size = upload.file.tell()
@@ -130,8 +134,8 @@ class Canvas:
         ctype = upload.content_type or "application/octet-stream"
         r = await self.request(
             "POST",
-            f"courses/{course}/assignments/{assignment}/submissions/self/files",
-            data={"name": upload.filename, "size": str(size), "content_type": ctype},
+            announce_path,
+            data={"name": upload.filename, "size": str(size), "content_type": ctype, **(extra or {})},
         )
         info = r.json()
         # The upload URL is usually a separate storage host: never send the Canvas token there.

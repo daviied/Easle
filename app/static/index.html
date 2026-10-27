@@ -15,6 +15,9 @@
   <link rel="stylesheet" href="/styles.css">
   <link rel="modulepreload" href="/api.js">
   <link rel="modulepreload" href="/html.js">
+  <link rel="modulepreload" href="/ui.js">
+  <link rel="modulepreload" href="/inbox.js">
+  <link rel="modulepreload" href="/quiz.js">
   <script type="module" src="/app.js"></script>
 </head>
 <body>
@@ -22,11 +25,14 @@
     <a class="brand" href="#/"><img src="/icons/icon.svg" alt="" width="28" height="28"><span>Easel</span></a>
     <nav class="side-nav">
       <a href="#/" data-nav="home"><span class="ico">🏠</span>Home</a>
+      <a href="#/inbox" data-nav="inbox"><span class="ico">✉️</span>Inbox<b class="nav-badge" data-badge="inbox" hidden></b></a>
       <a href="#/grades" data-nav="grades"><span class="ico">📊</span>Grades</a>
       <a href="#/announcements" data-nav="announcements"><span class="ico">📣</span>Announcements</a>
     </nav>
     <div class="side-label">Courses</div>
     <nav id="course-nav" class="side-nav"></nav>
+    <div class="side-label" id="group-label" hidden>Groups</div>
+    <nav id="group-nav" class="side-nav"></nav>
     <div class="side-foot"><span id="who" class="muted"></span><button id="logout" class="link-btn">Sign out</button></div>
   </aside>
   <div id="wrap">
@@ -40,6 +46,7 @@
   <nav id="tabbar">
     <a href="#/" data-nav="home"><span>🏠</span>Home</a>
     <a href="#/courses" data-nav="courses"><span>📚</span>Courses</a>
+    <a href="#/inbox" data-nav="inbox"><span>✉️</span>Inbox<b class="nav-badge" data-badge="inbox" hidden></b></a>
     <a href="#/grades" data-nav="grades"><span>📊</span>Grades</a>
     <a href="#/announcements" data-nav="announcements"><span>📣</span>News</a>
   </nav>

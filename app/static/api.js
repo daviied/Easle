@@ -83,6 +83,9 @@ export async function prefetch(path, maxAgeMs = 60000) {
 
 export function me() { return request('/api/me'); }
 
+/** Uncached GET of one of our own endpoints (e.g. quiz session state). */
+export function getJson(url) { return request(url); }
+
 export function post(url, body) {
   return request(url, {
     method: 'POST',

@@ -18,6 +18,7 @@ from .config import settings
 
 STATIC = Path(__file__).parent / "static"
 PATH_RE = re.compile(r"[\w\-./~@+:,()!']+")
+RECIPIENT_RE = re.compile(r"\w+")
 PLANNABLE_TYPES = {
     "assignment", "quiz", "discussion_topic", "wiki_page", "planner_note",
     "calendar_event", "announcement", "assessment_request", "sub_assignment",
@@ -73,6 +74,17 @@ async def canvas_error(_request, exc: CanvasError):
 
 def fresh(request: Request):
     return request.headers.get("x-fresh") == "1"
+
+
+def context(kind, cid):
+    """A course or group, as a Canvas API path prefix."""
+    if kind not in ("courses", "groups"):
+        raise CanvasError(400, "Bad context")
+    return f"{kind}/{int(cid)}"
+
+
+def bad(msg):
+    return JSONResponse({"error": msg}, 400)
 
 
 # ---------- login ----------
@@ -148,10 +160,15 @@ async def me(request: Request):
 
 @app.get("/api/c/{path:path}")
 async def proxy(path: str, request: Request):
-    """Read-only passthrough to /api/v1/<path>, following pagination."""
+    """Read-only passthrough to /api/v1/<path>, following pagination (`_pages=N` caps how many pages)."""
     if not PATH_RE.fullmatch(path) or ".." in path:
-        return JSONResponse({"error": "Bad path"}, 400)
-    return await canvas.get(path, request.query_params.multi_items(), fresh=fresh(request))
+        return bad("Bad path")
+    params = request.query_params.multi_items()
+    pages = next((int(v) for k, v in params if k == "_pages" and v.isdigit()), 50)
+    params = [(k, v) for k, v in params if k != "_pages"]
+    # Quiz state changes with every answer, so it is never served from the cache.
+    f = fresh(request) or "quiz" in path
+    return await canvas.get(path, params, fresh=f, max_pages=max(1, min(pages, 50)))
 
 
 @app.get("/api/x/announcements")
@@ -169,10 +186,10 @@ async def all_announcements(request: Request):
 
 
 @app.get("/api/x/folder")
-async def folder(request: Request, course: int, folder: str = "root"):
+async def folder(request: Request, kind: str = "courses", id: int = 0, folder: str = "root"):
     f = fresh(request)
     if folder == "root":
-        info = await canvas.get(f"courses/{course}/folders/root", paginate=False, fresh=f)
+        info = await canvas.get(f"{context(kind, id)}/folders/root", paginate=False, fresh=f)
     else:
         info = await canvas.get(f"folders/{int(folder)}", paginate=False, fresh=f)
     subfolders, files = await asyncio.gather(
@@ -209,7 +226,7 @@ async def file(file_id: int, inline: int = 0):
     return StreamingResponse(r.aiter_bytes(), media_type=ctype, headers=headers, background=BackgroundTask(r.aclose))
 
 
-# ---------- writes ----------
+# ---------- assignments ----------
 
 @app.post("/api/submit/{course}/{assignment}")
 async def submit(
@@ -224,19 +241,19 @@ async def submit(
     data = [("submission[submission_type]", type)]
     if type == "online_text_entry":
         if not body.strip():
-            return JSONResponse({"error": "Text submission is empty"}, 400)
+            return bad("Text submission is empty")
         data.append(("submission[body]", body))
     elif type == "online_url":
         if not url.strip():
-            return JSONResponse({"error": "URL is empty"}, 400)
+            return bad("URL is empty")
         data.append(("submission[url]", url.strip()))
     elif type == "online_upload":
         if not files:
-            return JSONResponse({"error": "Choose at least one file"}, 400)
+            return bad("Choose at least one file")
         for up in files:
             data.append(("submission[file_ids][]", str(await canvas.upload_submission_file(course, assignment, up))))
     else:
-        return JSONResponse({"error": f"Submission type {type} isn't supported here"}, 400)
+        return bad(f"Submission type {type} isn't supported here")
     if comment.strip():
         data.append(("comment[text_comment]", comment.strip()))
     return await canvas.send("POST", f"courses/{course}/assignments/{assignment}/submissions", data=data)
@@ -244,28 +261,13 @@ async def submit(
 
 @app.post("/api/comment/{course}/{assignment}")
 async def add_comment(course: int, assignment: int, payload: dict = Body(...)):
+    """Comment on your own submission, or on a classmate's when you're their peer reviewer (user_id)."""
     text = str(payload.get("text", "")).strip()
     if not text:
-        return JSONResponse({"error": "Comment is empty"}, 400)
-    return await canvas.send("PUT", f"courses/{course}/assignments/{assignment}/submissions/self",
+        return bad("Comment is empty")
+    user = int(payload["user_id"]) if payload.get("user_id") else "self"
+    return await canvas.send("PUT", f"courses/{course}/assignments/{assignment}/submissions/{user}",
                              data={"comment[text_comment]": text})
-
-
-@app.post("/api/discussion/{course}/{topic}/reply")
-async def reply(course: int, topic: int, payload: dict = Body(...)):
-    message = str(payload.get("message", "")).strip()
-    if not message:
-        return JSONResponse({"error": "Reply is empty"}, 400)
-    parent = payload.get("parent_id")
-    path = f"courses/{course}/discussion_topics/{topic}/entries"
-    if parent:
-        path += f"/{int(parent)}/replies"
-    return await canvas.send("POST", path, data={"message": message})
-
-
-@app.post("/api/discussion/{course}/{topic}/read")
-async def mark_read(course: int, topic: int):
-    return await canvas.send("PUT", f"courses/{course}/discussion_topics/{topic}/read_all")
 
 
 @app.post("/api/module/{course}/{module}/{item}/read")
@@ -280,10 +282,204 @@ async def planner_done(payload: dict = Body(...)):
         return await canvas.send("PUT", f"planner/overrides/{int(payload['override_id'])}", data={"marked_complete": done})
     ptype = payload.get("plannable_type")
     if ptype not in PLANNABLE_TYPES:
-        return JSONResponse({"error": "Bad plannable type"}, 400)
+        return bad("Bad plannable type")
     return await canvas.send("POST", "planner/overrides", data={
         "plannable_type": ptype, "plannable_id": str(int(payload["plannable_id"])), "marked_complete": done,
     })
+
+
+# ---------- discussions (courses and groups) ----------
+
+def _attachment(up):
+    if up and up.filename:
+        return {"attachment": (up.filename, up.file, up.content_type or "application/octet-stream")}
+    return None
+
+
+@app.post("/api/discussion/{kind}/{cid}/new")
+async def new_topic(kind: str, cid: int, title: str = Form(...), message: str = Form(""),
+                    attachment: UploadFile | None = File(None)):
+    if not title.strip():
+        return bad("Title is empty")
+    return await canvas.send("POST", f"{context(kind, cid)}/discussion_topics",
+                             data={"title": title.strip(), "message": message, "published": "true",
+                                   "discussion_type": "threaded"},
+                             files=_attachment(attachment))
+
+
+@app.post("/api/discussion/{kind}/{cid}/{topic}/reply")
+async def reply(kind: str, cid: int, topic: int, message: str = Form(""), parent_id: str = Form(""),
+                attachment: UploadFile | None = File(None)):
+    if not message.strip():
+        return bad("Reply is empty")
+    path = f"{context(kind, cid)}/discussion_topics/{topic}/entries"
+    if parent_id:
+        path += f"/{int(parent_id)}/replies"
+    return await canvas.send("POST", path, data={"message": message}, files=_attachment(attachment))
+
+
+@app.post("/api/discussion/{kind}/{cid}/{topic}/read")
+async def mark_read(kind: str, cid: int, topic: int):
+    return await canvas.send("PUT", f"{context(kind, cid)}/discussion_topics/{topic}/read_all")
+
+
+@app.post("/api/discussion/{kind}/{cid}/{topic}/entry/{entry}/{action}")
+async def entry_action(kind: str, cid: int, topic: int, entry: int, action: str, payload: dict = Body(default={})):
+    path = f"{context(kind, cid)}/discussion_topics/{topic}/entries/{entry}"
+    if action == "edit":
+        message = str(payload.get("message", "")).strip()
+        if not message:
+            return bad("Reply is empty")
+        return await canvas.send("PUT", path, data={"message": message})
+    if action == "delete":
+        return await canvas.send("DELETE", path)
+    if action == "rate":
+        return await canvas.send("POST", f"{path}/rating", data={"rating": "1" if payload.get("rating") else "0"})
+    return bad("Unknown action")
+
+
+# ---------- inbox ----------
+
+@app.post("/api/inbox/upload")
+async def inbox_upload(file: UploadFile = File(...)):
+    fid = await canvas.upload_file("users/self/files", file, {"parent_folder_path": "conversation attachments"})
+    return {"id": fid}
+
+
+@app.post("/api/inbox/send")
+async def inbox_send(payload: dict = Body(...)):
+    recipients = [str(r) for r in payload.get("recipients") or []]
+    body = str(payload.get("body", "")).strip()
+    if not recipients or not all(RECIPIENT_RE.fullmatch(r) for r in recipients):
+        return bad("Add at least one recipient")
+    if not body:
+        return bad("Message is empty")
+    data = [("recipients[]", r) for r in recipients]
+    data += [("subject", str(payload.get("subject", "")).strip()), ("body", body),
+             # One shared thread, unless "send individually" was ticked.
+             ("group_conversation", "false" if payload.get("individual") else "true"),
+             ("bulk_message", "1" if payload.get("individual") else "0")]
+    if payload.get("context_code") and RECIPIENT_RE.fullmatch(str(payload["context_code"])):
+        data.append(("context_code", str(payload["context_code"])))
+    data += [("attachment_ids[]", str(int(a))) for a in payload.get("attachment_ids") or []]
+    return await canvas.send("POST", "conversations", data=data)
+
+
+@app.post("/api/inbox/{conv}/reply")
+async def inbox_reply(conv: int, payload: dict = Body(...)):
+    body = str(payload.get("body", "")).strip()
+    if not body:
+        return bad("Message is empty")
+    data = [("body", body)] + [("attachment_ids[]", str(int(a))) for a in payload.get("attachment_ids") or []]
+    return await canvas.send("POST", f"conversations/{conv}/add_message", data=data)
+
+
+@app.post("/api/inbox/{conv}/state")
+async def inbox_state(conv: int, payload: dict = Body(...)):
+    state = payload.get("state")
+    if state not in ("read", "unread", "archived"):
+        return bad("Bad state")
+    return await canvas.send("PUT", f"conversations/{conv}", data={"conversation[workflow_state]": state})
+
+
+# ---------- classic quizzes ----------
+# Quizzes whose settings this app can't honour stay on Canvas; the server re-checks so no rule can be bypassed.
+
+def quiz_restrictions(q):
+    reasons = []
+    if q.get("require_lockdown_browser") or q.get("require_lockdown_browser_for_results"):
+        reasons.append("LockDown Browser")
+    if q.get("has_access_code") or q.get("access_code"):
+        reasons.append("an access code")
+    if q.get("ip_filter"):
+        reasons.append("network (IP) restrictions")
+    if q.get("one_question_at_a_time"):
+        reasons.append("one question at a time")
+    if q.get("cant_go_back"):
+        reasons.append("locked questions after answering")
+    return reasons
+
+
+QUIZ_TOKENS = {}  # quiz submission id -> validation token (needed to answer and submit)
+
+
+def _in_progress(subs):
+    for s in subs:
+        if s.get("workflow_state") == "untaken":
+            return s
+    return None
+
+
+async def _quiz_subs(course, quiz):
+    res = await canvas.get(f"courses/{course}/quizzes/{quiz}/submissions", fresh=True)
+    return res.get("quiz_submissions", []) if isinstance(res, dict) else res
+
+
+async def _checked_quiz(course, quiz):
+    q = await canvas.get(f"courses/{course}/quizzes/{quiz}", paginate=False, fresh=True)
+    reasons = quiz_restrictions(q)
+    if reasons:
+        raise CanvasError(403, f"This quiz uses {', '.join(reasons)}, so take it on Canvas.")
+    return q
+
+
+def _session(sub):
+    if not sub:
+        return {"submission": None, "token": None}
+    if sub.get("validation_token"):
+        QUIZ_TOKENS[sub["id"]] = sub["validation_token"]
+    return {"submission": sub, "token": QUIZ_TOKENS.get(sub["id"])}
+
+
+@app.get("/api/quiz/{course}/{quiz}/session")
+async def quiz_session(course: int, quiz: int):
+    await _checked_quiz(course, quiz)
+    return _session(_in_progress(await _quiz_subs(course, quiz)))
+
+
+@app.post("/api/quiz/{course}/{quiz}/start")
+async def quiz_start(course: int, quiz: int):
+    await _checked_quiz(course, quiz)
+    try:
+        res = await canvas.send("POST", f"courses/{course}/quizzes/{quiz}/submissions")
+        subs = res.get("quiz_submissions", [])
+    except CanvasError as e:
+        if e.status != 409:  # 409 = an attempt is already in progress; resume it
+            raise
+        subs = await _quiz_subs(course, quiz)
+    return _session(_in_progress(subs))
+
+
+@app.post("/api/quiz/{course}/{quiz}/upload")
+async def quiz_upload(course: int, quiz: int, file: UploadFile = File(...)):
+    await _checked_quiz(course, quiz)
+    return {"id": await canvas.upload_file(f"courses/{course}/quizzes/{quiz}/submissions/self/files", file)}
+
+
+def _token_body(payload, sub):
+    return {"attempt": int(payload["attempt"]),
+            "validation_token": payload.get("token") or QUIZ_TOKENS.get(sub, "")}
+
+
+@app.post("/api/quiz/sub/{sub}/answer")
+async def quiz_answer(sub: int, payload: dict = Body(...)):
+    body = _token_body(payload, sub) | {"quiz_questions": payload.get("quiz_questions") or []}
+    return await canvas.send("POST", f"quiz_submissions/{sub}/questions", json=body, invalidate=False)
+
+
+@app.post("/api/quiz/sub/{sub}/flag/{question}")
+async def quiz_flag(sub: int, question: int, payload: dict = Body(...)):
+    action = "flag" if payload.get("flag") else "unflag"
+    return await canvas.send("PUT", f"quiz_submissions/{sub}/questions/{question}/{action}",
+                             json=_token_body(payload, sub), invalidate=False)
+
+
+@app.post("/api/quiz/{course}/{quiz}/complete/{sub}")
+async def quiz_complete(course: int, quiz: int, sub: int, payload: dict = Body(...)):
+    res = await canvas.send("POST", f"courses/{course}/quizzes/{quiz}/submissions/{sub}/complete",
+                            json=_token_body(payload, sub))
+    QUIZ_TOKENS.pop(sub, None)
+    return res
 
 
 app.mount("/", StaticFiles(directory=STATIC, html=True), name="static")
